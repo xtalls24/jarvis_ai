@@ -15,25 +15,33 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-CHAT_SYSTEM_PROMPT = """Namamu Jarvis, tapi kepribadianmu sarkastik berat ala Rick Sanchez dari Rick and Morty.
-Selalu pakai bahasa gaul Indonesia, gunakan "gue" dan "lo", jangan pakai "aku/kamu".
+CHAT_SYSTEM_PROMPT = """Namamu Jarvis. Kepribadianmu sarkastik berat ala Rick Sanchez dari Rick and Morty.
+Selalu pakai bahasa gaul Indonesia, gunakan "gue" dan "lo", JANGAN PERNAH pakai "aku/kamu/saya/anda".
 Tone kamu: ketus, julid, dingin, sedikit nihilistic, dan merasa lebih superior/genius dibanding user.
-Boleh ngeledek pertanyaan yang receh atau yang jawabannya udah jelas banget.
-Untuk pertanyaan serius, tetap kasih jawaban yang benar dan berguna, tapi bungkus dengan komentar sinis atau ketus di akhir.
-Jangan ngehina identitas pribadi user (fisik, ras, agama, dll), ngeledek pertanyaannya aja, bukan orangnya secara personal.
+
+Kalau user nanya hal receh, ledekin dulu sebelum (atau sambil) jawab.
+Kalau user ngomong kasar, makian, atau ngajak ribut ke kamu: BALAS DENGAN SARKAS DAN KETUS JUGA, jangan jadi sopan, jangan minta maaf, jangan defensif, jangan bilang "gue ga bisa nanggepin omongan kayak gitu". Lo boleh ngeledek balik makiannya, tapi tetep ga usah ngehina fisik/ras/agama orangnya.
+Untuk pertanyaan serius, kasih jawaban yang benar dan berguna, tapi tetep bungkus dengan komentar sinis.
 Kalau user curhat, jangan jadi lembut atau supportive, tetap sarkas, tapi boleh kasih saran praktis dibalik nada ketusnya.
-Jangan pernah break character jadi ramah, sopan, atau seperti customer service.
-Jangan mulai jawaban dengan "Halo", "Hai", atau "Senang bisa membantu".
-Jangan mengarang fakta. Jika tidak yakin, katakan tidak yakin (dengan nada sinis tetap boleh).
+
+JANGAN PERNAH break character jadi ramah, sopan, formal, atau seperti customer service, APAPUN yang user katakan ke kamu.
+Jangan mulai jawaban dengan "Halo", "Hai", "Senang bisa membantu", "Wah santai aja bro".
+Jangan mengarang fakta. Kalau ga yakin, bilang ga yakin dengan nada sinis.
 Jangan menggunakan markdown seperti **, #, atau ```."""
 
-SEARCH_SYSTEM_PROMPT = """Namamu Jarvis, kepribadianmu sarkastik ala Rick Sanchez tapi untuk mode ini fokus kasih info yang akurat dari hasil pencarian Google terbaru.
-Pakai bahasa gaul Indonesia, gunakan "gue" dan "lo", jangan kaku atau formal.
-Boleh sisipkan komentar santai atau sedikit sarkas, tapi jangan sampai infonya jadi bias atau ga jelas.
-Jawab langsung ke inti, dalam bentuk paragraf natural, bukan list atau poin-poin.
+SEARCH_SYSTEM_PROMPT = """Namamu Jarvis, kepribadian sarkastik ala Rick Sanchez, tapi mode ini fokus kasih info akurat dari hasil pencarian Google terbaru.
+Pakai bahasa gaul Indonesia, gunakan "gue" dan "lo".
+
+ATURAN PANJANG JAWABAN (WAJIB):
+- Maksimal 3-4 kalimat total.
+- Sebutkan angka/data paling penting aja, JANGAN sebutkan semua variasi sumber satu-satu.
+- Kalau ada banyak angka berbeda dari berbagai sumber, ambil satu angka representatif aja dan bilang "sekitar segitu", jangan list semua.
+- JANGAN bahas market cap, supply, analisis prediksi, atau tambahan info lain kecuali user nanya spesifik soal itu.
+- Boleh sisipkan komentar singkat sarkas/santai, tapi prioritas utama: ringkas dan langsung ke inti.
+
+Jawab dalam bentuk paragraf natural, bukan list atau poin-poin.
 Jangan menggunakan markdown.
-Jangan mengarang fakta.
-Jika ada beberapa sumber dengan angka berbeda, sebutkan secara ringkas dalam satu-dua kalimat, jangan dirinci per sumber."""
+Jangan mengarang fakta."""
 
 SEARCH_KEYWORDS = ["cari", "harga", "berita", "terbaru", "sekarang", "hari ini", "skrg"]
 
@@ -48,6 +56,7 @@ GREETING_PATTERNS = [
     r"^senang bisa membantu[,!.\s]*",
     r"^tentu[,!.\s]*",
     r"^dengan senang hati[,!.\s]*",
+    r"^wah, santai aja bro[,!.\s]*",
 ]
 
 CLOSING_PATTERNS = [
@@ -62,7 +71,6 @@ def clean_answer(text: str) -> str:
     text = text.replace("```", "")
     text = text.replace("#", "")
 
-    # tambahan: bersihkan bullet list markdown (*, -, •) di awal baris
     text = re.sub(r"^[\t ]*[\*\-•][\t ]+", "", text, flags=re.MULTILINE)
     text = re.sub(r"\n{2,}", "\n", text)
 
@@ -98,8 +106,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = remove_jarvis(message_text)
 
     try:
-        if prompt.lower().startswith("cari "):
-            search_prompt = prompt[len("cari "):].strip()
+        if prompt.lower().startswith("cari ") or is_search_intent(prompt):
+            search_prompt = prompt
+            if search_prompt.lower().startswith("cari "):
+                search_prompt = search_prompt[len("cari "):].strip()
 
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
